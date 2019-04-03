@@ -32,7 +32,7 @@ class DateStrTransform extends  ScalarFunction {
       if(sourceFormat == null) {
         sourceFormat = new SimpleDateFormat(sourceFormatStr)
       }
-      if(sourceFormat == null) {
+      if(destFormatStr == null) {
         destFormat = new SimpleDateFormat(destFormatStr)
       }
       return destFormat.format(sourceFormat.parse(dateStr))

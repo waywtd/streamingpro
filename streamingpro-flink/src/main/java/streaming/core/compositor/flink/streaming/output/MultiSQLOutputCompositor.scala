@@ -20,6 +20,7 @@ package streaming.core.compositor.flink.streaming.output
 
 import java.util
 
+import com.alibaba.fastjson.JSON
 import org.apache.flink.table.api.TableEnvironment
 import org.apache.flink.table.api.scala.StreamTableEnvironment
 import org.apache.flink.table.sinks.{ConsoleTableSink, CsvTableSink}
@@ -95,31 +96,30 @@ class MultiSQLOutputCompositor[T] extends Compositor[T] with CompositorHelper wi
 
 
   def writeToRedis(ste: StreamTableEnvironment, tableName: String, _cfg: Map[String, String]) = {
-    val redisHosts :java.util.Set[HostAndPort] = _cfg.get("hosts").get.split(",").map(str => {
-      val host = str.split(":")(0)
-      val port = str.split(":")(1).toInt
-      new HostAndPort(host, port)
-    }).toSet.asJava
-      val timeout = _cfg.getOrElse("timeout", 10000).toString.toInt
-
          val columnNameToIndex = CollectionUtils.list2Map(ste.scan(tableName).getSchema.getFieldNames)
-         ste.toAppendStream[Row](ste.scan(tableName)).addSink(new RedisSinkFunction(redisHosts, timeout, _cfg, columnNameToIndex))
+         ste.toAppendStream[Row](ste.scan(tableName)).addSink(new RedisSinkFunction(_cfg, columnNameToIndex))
 
   }
 }
 
-class RedisSinkFunction(redisHosts: java.util.Set[HostAndPort], timeout:Int, _cfg:Map[String, String], columnNameToIndex:Map[String, Int] ) extends  SinkFunction[Row] {
+class RedisSinkFunction(_cfg:Map[String, String], columnNameToIndex:Map[String, Int] ) extends  SinkFunction[Row] {
   private  var  jedisCluster :JedisCluster = _
 
   override def invoke(row: Row, context: SinkFunction.Context[_]): Unit = {
         if(jedisCluster == null) {
           this.synchronized {
               if (jedisCluster == null) {
+                val redisHosts :java.util.Set[HostAndPort] = _cfg.get("hosts").get.split(",").map(str => {
+                val host = str.split(":")(0)
+                val port = str.split(":")(1).toInt
+                new HostAndPort(host, port)
+                }).toSet.asJava
+                val timeout = _cfg.getOrElse("timeout", 10000).toString.toInt
                   jedisCluster = new JedisCluster(redisHosts, timeout)
               }
             }
          }
-      _cfg("operators").asInstanceOf[util.List[util.Map[Any, Any]]].foreach(operator => {
+      JSON.parse(_cfg("operators")).asInstanceOf[util.List[util.Map[Any, Any]]].foreach(operator => {
       operator("type") match {
       case "incrBy" =>
       val key = operator("key").toString
